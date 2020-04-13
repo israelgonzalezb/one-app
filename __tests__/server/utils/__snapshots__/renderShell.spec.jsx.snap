@@ -1,0 +1,9 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`renderShell does not render presets when their values are null 1`] = `"<html lang=\\"en-US\\"><head></head><body><div></div></body></html>"`;
+
+exports[`renderShell renders basic markup without any arguments 1`] = `"<!DOCTYPE html><html lang=\\"en-US\\"><head><title>One App</title></head><body><div id=\\"root\\"></div></body></html>"`;
+
+exports[`renderShell renders markup with the standard template using replacements and default presets 1`] = `"<!DOCTYPE html><html lang=\\"en-US\\"><head><title>One App</title></head><body><div id=\\"root\\"><div data-reactroot=\\"\\"><p> rendered string from markup/component </p></div></div></body></html>"`;
+
+exports[`renderShell renders markup with the standard template using replacements and presets 1`] = `"<!DOCTYPE html><html lang=\\"ca-FR\\"><head><title>Node.js App</title><link rel=\\"manifest\\" href=\\"/manifest.webmanifest\\" crossorigin=\\"use-credentials\\"></head><body><div><div><p> rendered static string from markup/component </p></div></div></body></html>"`;
