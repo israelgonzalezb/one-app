@@ -16,42 +16,40 @@
 
 export default function readJsonFile(filePath) {
   switch (filePath.split('/').pop()) {
-    case '.build-meta.json':
+    case '.build-meta.json': {
+      const chunks = {
+        app: 'app.js',
+        'app~vendors': 'app~vendors.js',
+        'i18n/en': 'i18n/en.js',
+        'i18n/en-US': 'i18n/en-US.js',
+        'i18n/es-MX': 'i18n/es-MX.js',
+        'i18n/fr-CA': ['i18n/fr-CA.js', 'i18n/fr-CA.js.map'],
+        'i18n/tk-TM': 'i18n/tk-TM.js',
+        'i18n/am': ['i18n/am.js', 'i18n/am.js.map'],
+        'i18n/bs~i18n/bs-Cyrl~i18n/bs-Cyrl-BA~i18n/bs-Latn~i18n/bs-Latn-BA': [
+          'i18n/bs~i18n/bs-Cyrl~i18n/bs-Cyrl-BA~i18n/bs-Latn~i18n/bs-Latn-BA.js',
+          'i18n/bs~i18n/bs-Cyrl~i18n/bs-Cyrl-BA~i18n/bs-Latn~i18n/bs-Latn-BA.js.map',
+        ],
+        runtime: 'runtime.js',
+        vendors: ['vendors.js', 'vendors.js.map'],
+      };
       return {
         buildVersion: '1.2.3-rc.4-abc123',
-        modernBrowserChunkAssets: {
-          'i18n/en': 'i18n/en.js',
-          'bundle~common': 'bundle~common.js',
-          vendors: ['vendors.js', 'vendors.js.map'],
-          'i18n/en-US': 'i18n/en-US.js',
-          'i18n/tk-TM': 'i18n/tk-TM.js',
-          'i18n/am': ['i18n/am.js', 'i18n/am.js.map'],
-          'i18n/bs~i18n/bs-Cyrl~i18n/bs-Cyrl-BA~i18n/bs-Latn~i18n/bs-Latn-BA': [
-            'i18n/bs~i18n/bs-Cyrl~i18n/bs-Cyrl-BA~i18n/bs-Latn~i18n/bs-Latn-BA.js',
-            'i18n/bs~i18n/bs-Cyrl~i18n/bs-Cyrl-BA~i18n/bs-Latn~i18n/bs-Latn-BA.js.map',
-          ],
-        },
-        legacyBrowserChunkAssets: {
-          'i18n/en': 'i18n/en.js',
-          'bundle~common': 'bundle~common.js',
-          vendors: ['vendors.js', 'vendors.js.map'],
-          'i18n/en-US': 'i18n/en-US.js',
-          'i18n/tk-TM': 'i18n/tk-TM.js',
-          'i18n/am': ['i18n/am.js', 'i18n/am.js.map'],
-          'i18n/bs~i18n/bs-Cyrl~i18n/bs-Cyrl-BA~i18n/bs-Latn~i18n/bs-Latn-BA': [
-            'i18n/bs~i18n/bs-Cyrl~i18n/bs-Cyrl-BA~i18n/bs-Latn~i18n/bs-Latn-BA.js',
-            'i18n/bs~i18n/bs-Cyrl~i18n/bs-Cyrl-BA~i18n/bs-Latn~i18n/bs-Latn-BA.js.map',
-          ],
-        },
+        modernBrowserChunkAssets: chunks,
+        // the build output mirrors the modern chunk assets as of today
+        legacyBrowserChunkAssets: chunks,
       };
+    }
     case 'bundle.integrity.manifest.json':
       return {
-        'web.js': '123',
-        'named-chunk.js': '456',
-        'other-chunk.js': '789',
-        'legacy/web.js': 'abc',
-        'legacy/named-chunk.js': 'def',
-        'legacy/other-chunk.js': 'ghi',
+        'app.js': '123',
+        'app~vendors.js': '456',
+        'runtime.js': '789',
+        'vendors.js': '101112',
+        'legacy/app.js': 'abc',
+        'legacy/app~vendors.js': 'def',
+        'legacy/runtime.js': 'ghi',
+        'legacy/vendors.js': 'jkl',
       };
     default:
       throw new Error('Couldn\'t find JSON file to read');
