@@ -18,31 +18,13 @@
 /* eslint-disable es/no-arrow-functions */
 import { matchesUA } from 'browserslist-useragent';
 import { browserList } from 'babel-preset-amex/browserlist';
-import { Set as iSet } from 'immutable';
 
 import { setConfig } from '../../universal/ducks/config';
-import jsonStringifyForScript from '../utils/jsonStringifyForScript';
-import serializeClientInitialState from '../utils/serializeClientInitialState';
 import { getClientStateConfig } from '../utils/stateConfig';
-import getI18nFileFromState from '../utils/getI18nFileFromState';
 import renderModuleStyles from '../utils/renderModuleStyles';
-import readJsonFile from '../utils/readJsonFile';
+import { renderHtmlDocument } from '../utils/renderHtmlDocument';
 
-const { buildVersion } = readJsonFile('../../../.build-meta.json');
-const integrityManifest = readJsonFile('../../../bundle.integrity.manifest.json');
 const nodeEnvIsDevelopment = process.env.NODE_ENV === 'development';
-
-function getChunkAssets(assetsByChunkName) {
-  return Object
-    .entries(assetsByChunkName)
-    // i18n is different per request, app needs to be the last chunk loaded
-    .filter(([chunkName]) => !chunkName.startsWith('i18n/') && chunkName !== 'app')
-    .map(([, assets]) => (typeof assets === 'string' ? assets : assets[0]));
-}
-
-const modernBrowserChunkAssets = getChunkAssets(readJsonFile('../../../.build-meta.json').modernBrowserChunkAssets);
-const legacyBrowserChunkAssets = getChunkAssets(readJsonFile('../../../.build-meta.json').legacyBrowserChunkAssets)
-  .map((chunkAsset) => `legacy/${chunkAsset}`);
 
 export function safeSend(res, ...payload) {
   if (!res.headersSent) {
@@ -88,126 +70,6 @@ export function renderStaticErrorPage(res) {
         </html>`);
 }
 
-function renderI18nScript(clientInitialState, appBundlesURLPrefix) {
-  const i18nFile = getI18nFileFromState(clientInitialState);
-  if (!i18nFile) {
-    return '';
-  }
-
-  return `<script src="${appBundlesURLPrefix}/${i18nFile}" crossorigin="anonymous"></script>`;
-}
-
-export function renderModuleScripts({
-  clientInitialState, moduleMap, isDevelopmentEnv, bundle,
-}) {
-  const clientConfig = getClientStateConfig();
-  const { rootModuleName } = clientConfig;
-  // Sorting to ensure that the rootModule is the first script to load,
-  // this is required to correctly provide external dependencies.
-  const orderedLoadedModules = clientInitialState.getIn(['holocron', 'loaded'], iSet())
-    .sort((currentModule, nextModule) => {
-      if (currentModule === rootModuleName) { return -1; }
-      if (nextModule === rootModuleName) { return 1; }
-      return 0;
-    });
-
-  return orderedLoadedModules.map((moduleName) => {
-    const { integrity, url: src } = moduleMap.modules[moduleName][bundle];
-    const { clientCacheRevision } = moduleMap;
-    const additionalAttributes = isDevelopmentEnv ? '' : `integrity="${integrity}"`;
-    const scriptSource = isDevelopmentEnv || !clientCacheRevision ? src : `${src}?clientCacheRevision=${clientCacheRevision}`;
-    return `<script src="${scriptSource}" crossorigin="anonymous" ${additionalAttributes}></script>`;
-  }).join(isDevelopmentEnv ? '\n          ' : '');
-}
-
-function getHelmetData(data, fallback = '') {
-  return (data && data.toString()) || fallback;
-}
-
-function getHelmetString(helmetInfo, disableStyles) {
-  const {
-    title, meta, style, link, base,
-  } = helmetInfo;
-
-  let linkText = getHelmetData(link);
-
-  // filter only stylesheets
-  if (linkText && disableStyles) {
-    linkText = linkText.match(/<[^>]+>/g)
-      .filter((match) => !match.includes('rel="stylesheet"'))
-      .join('');
-  }
-
-  const styleText = disableStyles ? '' : getHelmetData(style);
-
-  return `
-${getHelmetData(title, '<title>One App</title>')}
-${getHelmetData(meta)}
-${styleText}
-${linkText}
-${getHelmetData(base)}
-  `;
-}
-
-export function getHtmlAttributesString(helmetInfo) {
-  const { htmlAttributes } = helmetInfo;
-  return (htmlAttributes && ` ${htmlAttributes.toString()}`) || '';
-}
-
-export function getHead({
-  helmetInfo,
-  store,
-  disableStyles,
-}) {
-  return `
-    <head>
-      ${getHelmetString(helmetInfo, disableStyles)}
-      ${disableStyles ? '' : `
-      ${renderModuleStyles(store)}
-      `}
-    </head>
-  `;
-}
-
-export function getBody({
-  isLegacy,
-  helmetInfo,
-  assets,
-  appHtml,
-  appBundlesURLPrefix,
-  clientInitialState,
-  disableScripts,
-  clientModuleMapCache,
-  scriptNonce,
-}) {
-  const bundle = isLegacy ? 'legacyBrowser' : 'browser';
-  const { bodyAttributes, script } = helmetInfo;
-  const bundlePrefixForBrowser = isLegacy ? `${appBundlesURLPrefix}/legacy` : appBundlesURLPrefix;
-  return `
-    <body${(bodyAttributes && ` ${bodyAttributes.toString()}`) || ''}>
-      <div id="root">${appHtml || ''}</div>
-      ${disableScripts ? '' : `
-      <script id="initial-state" ${scriptNonce ? `nonce="${scriptNonce}"` : ''}>
-        window.__webpack_public_path__ = ${jsonStringifyForScript(`${appBundlesURLPrefix}/`)};
-        window.__CLIENT_HOLOCRON_MODULE_MAP__ = ${jsonStringifyForScript(clientModuleMapCache[bundle])};
-        window.__INITIAL_STATE__ = ${jsonStringifyForScript(serializeClientInitialState(clientInitialState))};
-        window.__holocron_module_bundle_type__ = '${bundle}';
-      </script>
-      ${assets}
-      ${renderI18nScript(clientInitialState, bundlePrefixForBrowser)}
-      ${renderModuleScripts({
-    clientInitialState,
-    moduleMap: clientModuleMapCache[bundle],
-    isDevelopmentEnv: nodeEnvIsDevelopment,
-    bundle,
-  })}
-      <script src="${bundlePrefixForBrowser}/app.js" integrity="${integrityManifest[isLegacy ? 'legacy/app.js' : 'app.js']}" crossorigin="anonymous"></script>
-      ${(script && script.toString()) || ''}
-      `}
-    </body>
-  `;
-}
-
 export function renderPartial({
   html: initialHtml,
   store,
@@ -240,7 +102,7 @@ export default function sendHtml(req, res) {
   let body;
   try {
     const {
-      appHtml, clientModuleMapCache, store, headers, helmetInfo = {},
+      appHtml, store, headers, helmetInfo = {},
     } = req;
     const { scriptNonce } = res;
     const userAgent = headers['user-agent'];
@@ -256,51 +118,23 @@ export default function sendHtml(req, res) {
     // replace server specific config with client specific config (api urls and such)
     const clientConfig = getClientStateConfig();
     store.dispatch(setConfig(clientConfig));
-    const cdnUrl = clientConfig.cdnUrl || '/_/static/';
-    const clientInitialState = store.getState();
-    const appBundlesURLPrefix = `${cdnUrl}app/${buildVersion}`;
 
-    const disableScripts = clientInitialState.getIn(['rendering', 'disableScripts']);
-    const disableStyles = clientInitialState.getIn(['rendering', 'disableStyles']);
+    const clientInitialState = store.getState();
     const renderPartialOnly = clientInitialState.getIn(['rendering', 'renderPartialOnly']);
 
     if (renderPartialOnly) {
       return safeSend(res, renderPartial({ html: req.appHtml, store }));
     }
 
-    const chunkAssets = isLegacy ? legacyBrowserChunkAssets : modernBrowserChunkAssets;
-
-    const assets = chunkAssets
-      .map((chunkAsset) => `<script src="${appBundlesURLPrefix}/${chunkAsset}" integrity="${integrityManifest[chunkAsset]}" crossorigin="anonymous"></script>`)
-      .join('\n          ');
-
-    const headSectionArgs = {
-      helmetInfo,
+    body = renderHtmlDocument({
+      isStatic: false,
+      isDevelopment: nodeEnvIsDevelopment,
+      bundleType: isLegacy ? 'legacy' : 'browser',
       store,
-      disableScripts,
-      disableStyles,
-      scriptNonce,
-    };
-
-    const bodySectionArgs = {
-      helmetInfo,
-      isLegacy,
-      assets,
       appHtml,
-      appBundlesURLPrefix,
-      clientInitialState,
-      disableScripts,
-      clientModuleMapCache,
+      helmetInfo,
       scriptNonce,
-    };
-
-    body = `
-      <!DOCTYPE html>
-      <html${getHtmlAttributesString(helmetInfo)}>
-        ${getHead(headSectionArgs)}
-        ${getBody(bodySectionArgs)}
-      </html>
-    `;
+    });
   } catch (err) {
     console.error('sendHtml had an error, sending static error page', err);
     return renderStaticErrorPage(res);

@@ -17,14 +17,9 @@
 import { fromJS } from 'immutable';
 import sendHtml, {
   renderStaticErrorPage,
-  renderModuleScripts,
   safeSend,
 } from '../../../src/server/middleware/sendHtml';
-// _client is a method to control the mock
-// eslint-disable-next-line import/named
 import { getClientStateConfig } from '../../../src/server/utils/stateConfig';
-// _setVars is a method to control the mock
-// eslint-disable-next-line import/named
 import transit from '../../../src/universal/utils/transit';
 import { setClientModuleMapCache, getClientModuleMapCache } from '../../../src/server/utils/clientModuleMapCache';
 
@@ -38,49 +33,8 @@ jest.mock('holocron', () => ({
   },
 }));
 jest.mock('../../../src/server/utils/stateConfig');
-jest.mock('../../../src/server/utils/readJsonFile', () => (filePath) => {
-  switch (filePath) {
-    case '../../../.build-meta.json':
-      return {
-        buildVersion: '1.2.3-rc.4-abc123',
-        modernBrowserChunkAssets: {
-          'i18n/en': 'i18n/en.js',
-          'bundle~common': 'bundle~common.js',
-          vendors: ['vendors.js', 'vendors.js.map'],
-          'i18n/en-US': 'i18n/en-US.js',
-          'i18n/tk-TM': 'i18n/tk-TM.js',
-          'i18n/am': ['i18n/am.js', 'i18n/am.js.map'],
-          'i18n/bs~i18n/bs-Cyrl~i18n/bs-Cyrl-BA~i18n/bs-Latn~i18n/bs-Latn-BA': [
-            'i18n/bs~i18n/bs-Cyrl~i18n/bs-Cyrl-BA~i18n/bs-Latn~i18n/bs-Latn-BA.js',
-            'i18n/bs~i18n/bs-Cyrl~i18n/bs-Cyrl-BA~i18n/bs-Latn~i18n/bs-Latn-BA.js.map',
-          ],
-        },
-        legacyBrowserChunkAssets: {
-          'i18n/en': 'i18n/en.js',
-          'bundle~common': 'bundle~common.js',
-          vendors: ['vendors.js', 'vendors.js.map'],
-          'i18n/en-US': 'i18n/en-US.js',
-          'i18n/tk-TM': 'i18n/tk-TM.js',
-          'i18n/am': ['i18n/am.js', 'i18n/am.js.map'],
-          'i18n/bs~i18n/bs-Cyrl~i18n/bs-Cyrl-BA~i18n/bs-Latn~i18n/bs-Latn-BA': [
-            'i18n/bs~i18n/bs-Cyrl~i18n/bs-Cyrl-BA~i18n/bs-Latn~i18n/bs-Latn-BA.js',
-            'i18n/bs~i18n/bs-Cyrl~i18n/bs-Cyrl-BA~i18n/bs-Latn~i18n/bs-Latn-BA.js.map',
-          ],
-        },
-      };
-    case '../../../bundle.integrity.manifest.json':
-      return {
-        'app.js': '098',
-        'bundle~common.js': '1234',
-        'vendors.js': '5678',
-        'legacy/app.js': 'zyx',
-        'legacy/bundle~common.js': 'abc',
-        'legacy/vendors.js': 'def',
-      };
-    default:
-      throw new Error('Couldn\'t find JSON file to read');
-  }
-});
+jest.mock('../../../src/server/utils/readJsonFile');
+jest.mock('../../../src/server/utils/clientModuleMapCache');
 jest.mock('../../../src/universal/utils/transit', () => ({
   toJSON: jest.fn(() => 'serialized in a string'),
 }));
@@ -88,6 +42,44 @@ jest.mock('../../../src/universal/utils/transit', () => ({
 jest.spyOn(console, 'info').mockImplementation(() => {});
 jest.spyOn(console, 'log').mockImplementation(() => {});
 jest.spyOn(console, 'error').mockImplementation(() => {});
+
+function createInitialStateMock({
+  cdnUrl = '/_/static/',
+  activeLocale = 'en-US',
+  rootModuleName = 'test-root',
+  modules = [],
+  disableScripts = false,
+  disableStyles = false,
+  renderPartialOnly = false,
+} = {}) {
+  return fromJS({
+    config: {
+      rootModuleName,
+      cdnUrl,
+    },
+    intl: { activeLocale },
+    holocron: {
+      loaded: [].concat(modules),
+    },
+    rendering: {
+      disableStyles,
+      disableScripts,
+      renderPartialOnly,
+    },
+  });
+}
+
+function createStoreMock(initialState) {
+  let state = createInitialStateMock(initialState);
+  return {
+    dispatch: jest.fn((action) => {
+      if (action.type === 'global/config/SET_CONFIG') {
+        state = state.set('config', action.config);
+      }
+    }),
+    getState: jest.fn(() => state),
+  };
+}
 
 describe('sendHtml', () => {
   const appHtml = '<p>Why, hello!</p>';
@@ -192,16 +184,7 @@ describe('sendHtml', () => {
     res.redirect = jest.fn(() => res);
     res.end = jest.fn(() => res);
     req.url = 'http://example.com/request';
-    req.store = {
-      dispatch: jest.fn(),
-      getState: jest.fn(() => fromJS({
-        holocron: fromJS({
-          loaded: ['test-root'],
-        }),
-        intl: fromJS({ activeLocale: 'en-US' }),
-        rendering: fromJS({}),
-      })),
-    };
+    req.store = createStoreMock({ modules: ['test-root'], cdnUrl: '/cdnUrl/' });
     req.clientModuleMapCache = getClientModuleMapCache();
     req.appHtml = appHtml;
 
@@ -231,7 +214,7 @@ describe('sendHtml', () => {
 
       expect(res.send.mock.calls[0][0]).toContain(appHtml);
       expect(res.send.mock.calls[0][0]).toContain(
-        'window.__webpack_public_path__ = "/cdnUrl/app/1.2.3-rc.4-abc123/";'
+        'window.__webpack_public_path__ = \'/cdnUrl/app/1.2.3-rc.4-abc123/\';'
       );
       expect(res.send.mock.calls[0][0]).toContain(
         'window.__holocron_module_bundle_type__ = \'browser\';'
@@ -267,7 +250,7 @@ describe('sendHtml', () => {
       expect(res.send.mock.calls[0][0]).toContain('<title>One App</title>');
       expect(res.send.mock.calls[0][0]).toContain(appHtml);
       expect(res.send.mock.calls[0][0]).toContain(
-        'window.__webpack_public_path__ = "/_/static/app/1.2.3-rc.4-abc123/";'
+        'window.__webpack_public_path__ = \'/_/static/app/1.2.3-rc.4-abc123/\';'
       );
       expect(removeInitialState(res.send.mock.calls[0][0])).not.toContain('undefined');
     });
@@ -286,7 +269,7 @@ describe('sendHtml', () => {
       sendHtml(req, res);
       expect(res.send).toHaveBeenCalledTimes(1);
       expect(res.send.mock.calls[0][0]).toContain('<!DOCTYPE html>');
-      expect(res.send.mock.calls[0][0]).toContain('<html htmlAttributes>');
+      expect(res.send.mock.calls[0][0]).toContain('<html lang="en-US" htmlAttributes>');
 
       expect(res.send.mock.calls[0][0]).not.toContain('<title>One App</title>');
       expect(res.send.mock.calls[0][0]).toContain('<title>title</title>');
@@ -304,16 +287,16 @@ describe('sendHtml', () => {
     it('sends a rendered page with the one-app script tags', () => {
       sendHtml(req, res);
       expect(res.send).toHaveBeenCalledTimes(1);
-      expect(res.send.mock.calls[0][0]).toContain('<script src="/cdnUrl/app/1.2.3-rc.4-abc123/bundle~common.js" integrity="1234" crossorigin="anonymous"></script>');
-      expect(res.send.mock.calls[0][0]).toContain('<script src="/cdnUrl/app/1.2.3-rc.4-abc123/app.js" integrity="098" crossorigin="anonymous"></script>');
+      expect(res.send.mock.calls[0][0]).toContain('<script src="/cdnUrl/app/1.2.3-rc.4-abc123/app~vendors.js" integrity="456" crossorigin="anonymous"></script>');
+      expect(res.send.mock.calls[0][0]).toContain('<script src="/cdnUrl/app/1.2.3-rc.4-abc123/app.js" integrity="123" crossorigin="anonymous"></script>');
     });
 
     it('sends a rendered page with the legacy app bundle according to the user agent', () => {
       req.headers['user-agent'] = 'Browser/5.0 (compatible; NUEI 100.0; Doors TX 81.4; Layers/1.0)';
       sendHtml(req, res);
       expect(res.send).toHaveBeenCalledTimes(1);
-      expect(res.send.mock.calls[0][0]).toContain('<script src="/cdnUrl/app/1.2.3-rc.4-abc123/legacy/bundle~common.js" integrity="abc" crossorigin="anonymous"></script>');
-      expect(res.send.mock.calls[0][0]).toContain('<script src="/cdnUrl/app/1.2.3-rc.4-abc123/legacy/app.js" integrity="zyx" crossorigin="anonymous"></script>');
+      expect(res.send.mock.calls[0][0]).toContain('<script src="/cdnUrl/app/1.2.3-rc.4-abc123/legacy/app~vendors.js" integrity="def" crossorigin="anonymous"></script>');
+      expect(res.send.mock.calls[0][0]).toContain('<script src="/cdnUrl/app/1.2.3-rc.4-abc123/legacy/app.js" integrity="abc" crossorigin="anonymous"></script>');
     });
 
     it('sends a rendered page with the locale data script tag', () => {
@@ -324,16 +307,7 @@ describe('sendHtml', () => {
 
     it('sends a rendered page without the locale data script tag when the activeLocale is not known', () => {
       setFullMap();
-      req.store = {
-        dispatch: jest.fn(),
-        getState: jest.fn(() => fromJS({
-          holocron: fromJS({
-            loaded: ['a'],
-          }),
-          intl: fromJS({ activeLocale: 'tlh' }),
-          rendering: fromJS({}),
-        })),
-      };
+      req.store = createStoreMock({ modules: ['test-root'], activeLocale: 'zz-HRR' });
       sendHtml(req, res);
       expect(res.send).toHaveBeenCalledTimes(1);
       expect(res.send.mock.calls[0][0]).not.toContain('src="/cdnUrl/app/1.2.3-rc.4-abc123/i18n/');
@@ -349,10 +323,10 @@ describe('sendHtml', () => {
         '<script src="/cdnUrl/app/1.2.3-rc.4-abc123/i18n/en-US.js" crossorigin="anonymous"></script>'
       );
       expect(res.send.mock.calls[0][0]).toContain(
-        '<script src="/cdnUrl/app/1.2.3-rc.4-abc123/bundle~common.js" integrity="1234" crossorigin="anonymous"></script>'
+        '<script src="/cdnUrl/app/1.2.3-rc.4-abc123/app~vendors.js" integrity="456" crossorigin="anonymous"></script>'
       );
       expect(res.send.mock.calls[0][0]).toContain(
-        '<script src="/cdnUrl/app/1.2.3-rc.4-abc123/app.js" integrity="098" crossorigin="anonymous"></script>'
+        '<script src="/cdnUrl/app/1.2.3-rc.4-abc123/app.js" integrity="123" crossorigin="anonymous"></script>'
       );
       expect(res.send.mock.calls[0][0]).toContain(
         '<script src="https://example.com/cdn/test-root/2.2.2/test-root.browser.js'
@@ -404,18 +378,10 @@ describe('sendHtml', () => {
 
     describe('renderPartialOnly', () => {
       beforeEach(() => {
-        req.store = {
-          dispatch: jest.fn(),
-          getState: jest.fn(() => fromJS({
-            holocron: fromJS({
-              loaded: ['a'],
-            }),
-            intl: fromJS({ activeLocale: 'en-US' }),
-            rendering: fromJS({
-              renderPartialOnly: true,
-            }),
-          })),
-        };
+        req.store = createStoreMock({
+          modules: ['a'],
+          renderPartialOnly: true,
+        });
         setFullMap();
       });
 
@@ -445,18 +411,10 @@ describe('sendHtml', () => {
 
     describe('disableScripts', () => {
       beforeEach(() => {
-        req.store = {
-          dispatch: jest.fn(),
-          getState: jest.fn(() => fromJS({
-            holocron: fromJS({
-              loaded: ['a'],
-            }),
-            intl: fromJS({ activeLocale: 'en-US' }),
-            rendering: fromJS({
-              disableScripts: true,
-            }),
-          })),
-        };
+        req.store = createStoreMock({
+          modules: ['a'],
+          disableScripts: true,
+        });
         setFullMap();
       });
 
@@ -495,18 +453,7 @@ describe('sendHtml', () => {
 
     describe('disableStyles', () => {
       beforeEach(() => {
-        req.store = {
-          dispatch: jest.fn(),
-          getState: jest.fn(() => fromJS({
-            holocron: fromJS({
-              loaded: ['a'],
-            }),
-            intl: fromJS({ activeLocale: 'en-US' }),
-            rendering: fromJS({
-              disableStyles: true,
-            }),
-          })),
-        };
+        req.store = createStoreMock({ modules: ['a'], disableStyles: true });
         setFullMap();
       });
 
@@ -546,117 +493,6 @@ describe('sendHtml', () => {
     });
   });
 
-  describe('renderModuleScripts', () => {
-    let clientModuleMapCache;
-
-    beforeEach(() => {
-      setClientModuleMapCache({
-        clientCacheRevision: '123',
-        modules: {
-          'test-root': {
-            node: {
-              url: 'https://example.com/cdn/test-root/2.2.2/test-root.node.js',
-              integrity: '4y45hr',
-            },
-            browser: {
-              url: 'https://example.com/cdn/test-root/2.2.2/test-root.browser.js',
-              integrity: 'nggdfhr34',
-            },
-            legacyBrowser: {
-              url: 'https://example.com/cdn/test-root/2.2.2/test-root.legacy.browser.js',
-              integrity: '7567ee',
-            },
-          },
-        },
-      });
-      clientModuleMapCache = getClientModuleMapCache();
-    });
-
-    it('adds cache busting clientCacheRevision from module map to each module script src if NODE_ENV is production', () => {
-      expect(renderModuleScripts({
-        clientInitialState: req.store.getState(),
-        moduleMap: clientModuleMapCache.browser,
-        isDevelopmentEnv: false,
-        bundle: 'browser',
-      })).toMatchSnapshot();
-    });
-
-    it('does not add cache busting clientCacheRevision from module map to each module script src if NODE_ENV is development', () => {
-      expect(renderModuleScripts({
-        clientInitialState: req.store.getState(),
-        moduleMap: clientModuleMapCache.browser,
-        isDevelopmentEnv: true,
-        bundle: 'browser',
-      })).toMatchSnapshot();
-    });
-
-    it('does not add cache busting clientCacheRevision if not present', () => {
-      const moduleMap = { ...clientModuleMapCache.browser };
-      delete moduleMap.clientCacheRevision;
-      expect(renderModuleScripts({
-        clientInitialState: req.store.getState(),
-        moduleMap,
-        isDevelopmentEnv: false,
-        bundle: 'browser',
-      })).toMatchSnapshot();
-    });
-
-    it('sends a rendered page with cross origin scripts', () => {
-      expect(renderModuleScripts({
-        clientInitialState: req.store.getState(),
-        moduleMap: clientModuleMapCache.browser,
-        isDevelopmentEnv: true,
-        bundle: 'browser',
-      })).toMatchSnapshot();
-    });
-
-    it('send a rendered page with correctly ordered modules', () => {
-      setFullMap();
-
-      const holocronState = fromJS({
-        holocron: {
-          loaded: ['a', 'b', 'test-root', 'c'],
-        },
-      });
-      expect(renderModuleScripts({
-        clientInitialState: holocronState,
-        moduleMap: getClientModuleMapCache().browser,
-        isDevelopmentEnv: false,
-        bundle: 'browser',
-      })).toMatchSnapshot();
-    });
-
-    it('send a rendered page keeping correctly ordered modules', () => {
-      setFullMap();
-
-      const holocronState = fromJS({
-        holocron: fromJS({
-          loaded: ['test-root', 'a', 'b', 'c'],
-        }),
-      });
-      expect(renderModuleScripts({
-        clientInitialState: holocronState,
-        moduleMap: getClientModuleMapCache().browser,
-        isDevelopmentEnv: false,
-        bundle: 'browser',
-      })).toMatchSnapshot();
-    });
-
-    it('send a rendered page with module script tags with integrity attribute if NODE_ENV is production', () => {
-      const holocronState = fromJS({
-        holocron: fromJS({
-          loaded: ['test-root'],
-        }),
-      });
-      expect(renderModuleScripts({
-        clientInitialState: holocronState,
-        moduleMap: clientModuleMapCache.browser,
-        isDevelopmentEnv: false,
-        bundle: 'browser',
-      })).toMatchSnapshot();
-    });
-  });
-
   describe('serializing the client initial state', () => {
     it('sends the bare state possible when there are errors serializing the entire state', () => {
       const fullStateError = new Error('Error serializing unrecognized object');
@@ -678,7 +514,7 @@ describe('sendHtml', () => {
 
       expect(res.send.mock.calls[0][0]).toContain(appHtml);
       expect(res.send.mock.calls[0][0]).toContain(
-        'window.__webpack_public_path__ = "/cdnUrl/app/1.2.3-rc.4-abc123/";'
+        'window.__webpack_public_path__ = \'/cdnUrl/app/1.2.3-rc.4-abc123/\';'
       );
       expect(res.send.mock.calls[0][0]).toContain(
         'window.__INITIAL_STATE__ = "serialized bare state possible";'
