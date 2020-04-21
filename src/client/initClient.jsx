@@ -15,7 +15,7 @@
  */
 
 import React, { StrictMode } from 'react';
-import { hydrate } from 'react-dom';
+import ReactDOM from 'react-dom';
 import { Provider } from 'react-redux';
 import { browserHistory, Router } from '@americanexpress/one-app-router';
 import { setModuleMap } from 'holocron';
@@ -26,6 +26,12 @@ import match from '../universal/utils/matchPromisified';
 
 
 export default async function initClient() {
+  // depending on if we are hydrating server side rendered markup
+  // or rendering directly into the root document node, renderMode
+  // will choose the appropriate rendering method
+  const { __render_mode__: renderMode = 'hydrate' } = global;
+  const render = ReactDOM[renderMode];
+
   try {
     // eslint-disable-next-line no-underscore-dangle
     setModuleMap(global.__CLIENT_HOLOCRON_MODULE_MAP__);
@@ -56,7 +62,7 @@ export default async function initClient() {
     );
     /* eslint-enable react/jsx-props-no-spreading */
 
-    hydrate(
+    render(
       <App />,
       document.getElementById('root')
     );

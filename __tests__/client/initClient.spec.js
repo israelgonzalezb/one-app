@@ -41,6 +41,7 @@ jest.mock('../../src/client/prerender', () => {
 jest.mock('react-dom', () => {
   const reactDom = require.requireActual('react-dom');
   reactDom.hydrate = jest.fn();
+  reactDom.render = jest.fn();
   return reactDom;
 });
 
@@ -213,5 +214,34 @@ describe('initClient', () => {
 
     expect(getModuleMap().equals(fromJS(clientHolocronModuleMap))).toBe(true);
     expect(getModuleMap()).toMatchSnapshot();
+  });
+
+  it('should use __render_mode__ to render the app instead of hydrating', async () => {
+    expect.assertions(2);
+
+    // eslint-disable-next-line no-underscore-dangle
+    global.__render_mode__ = 'render';
+
+    const promiseResolveSpy = jest.spyOn(Promise, 'resolve');
+    const { render } = require('react-dom');
+
+    document.getElementById = jest.fn(() => ({ remove: jest.fn() }));
+
+    const { match } = require('@americanexpress/one-app-router');
+    match.mockImplementationOnce((config, cb) => cb(null, null, { testProp: 'test' }));
+
+    const { loadPrerenderScripts } = require('../../src/client/prerender');
+    loadPrerenderScripts.mockReturnValueOnce(Promise.resolve());
+    promiseResolveSpy.mockRestore();
+
+    const initClient = require('../../src/client/initClient').default;
+
+    await initClient();
+
+    const tree = shallow(render.mock.calls[0][0]);
+    expect(tree).toMatchSnapshot();
+
+    // eslint-disable-next-line no-underscore-dangle
+    delete global.__render_mode__;
   });
 });
