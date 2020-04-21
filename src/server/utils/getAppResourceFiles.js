@@ -123,6 +123,7 @@ export function getI18nFileFromLocale({
   // in the event that the exact locale is not found, we go through each part
   // of the locale and piece them together in search of a match
   if (!url) {
+    // Sourced from `getI18nFileFromState`:
     // adapted from one-app-ducks src/intl/index.js getLocalePack()
     const localeArray = locale.split('-');
     while (localeArray.length > 0) {
