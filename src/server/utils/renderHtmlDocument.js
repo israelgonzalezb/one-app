@@ -179,7 +179,6 @@ export function renderHtmlDocument({
   }
 
   if (!disableScripts) {
-    // TODO: remove from createRequestStore and place here
     const clientModuleMap = getClientModuleMapCache();
     const modules = orderModules(loaded, rootModuleName);
 

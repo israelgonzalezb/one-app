@@ -108,13 +108,6 @@ describe('createRequestStore', () => {
     expect(next).toHaveBeenCalled();
   });
 
-  it('should add the client holocron module map cache to the request object', () => {
-    const middleware = createRequestStore({ reducers });
-    middleware(req, res, next);
-    expect(req.clientModuleMapCache).toMatchSnapshot();
-    expect(next).toHaveBeenCalled();
-  });
-
   it('should send the static error page when there is an error', () => {
     const middleware = createRequestStore({ reducers: null });
     middleware(req, res, next);
