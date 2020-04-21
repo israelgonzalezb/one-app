@@ -22,7 +22,6 @@ import createEnhancer from '../../universal/enhancers';
 import safeRequest from '../utils/safeRequest';
 import { getServerStateConfig, getClientStateConfig } from '../utils/stateConfig';
 import createSsrFetch from '../utils/createSsrFetch';
-import { getClientModuleMapCache } from '../utils/clientModuleMapCache';
 
 export default function createRequestStore(
   { reducers },
