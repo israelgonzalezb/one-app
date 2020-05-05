@@ -44,6 +44,8 @@ Object {
 
 exports[`Tests that require Docker setup one-app successfully started metrics has all metrics 1`] = `
 Array [
+  "circuit",
+  "circuit_perf",
   "nodejs_active_handles",
   "nodejs_active_handles_total",
   "nodejs_active_requests",
