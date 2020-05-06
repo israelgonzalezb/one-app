@@ -204,20 +204,35 @@ const doWork = async () => {
       }
     }
 
+    const moduleBaseUrl = `${bundleStaticsOrigin}/modules/${gitSha}/${moduleName}/${moduleVersion}/${moduleName}`;
+    const moduleBaseObj = {};
+
+    ['browser', 'legacyBrowser', 'node'].forEach((environment) => {
+      const environmentAlt = environment !== 'legacyBrowser' ? environment : 'legacy.browser';
+      Object.assign(moduleBaseObj, {
+        [environment]: {
+          url: `${moduleBaseUrl}.${environmentAlt}.js`,
+          integrity: integrityDigests[environment],
+        },
+      });
+    });
+    moduleMapContent.modules[moduleName] = moduleBaseObj;
+    /*
     moduleMapContent.modules[moduleName] = {
       browser: {
-        url: `${bundleStaticsOrigin}/modules/${gitSha}/${moduleName}/${moduleVersion}/${moduleName}.browser.js`,
+        url: `${moduleBaseUrl}.browser.js`,
         integrity: integrityDigests.browser,
       },
       legacyBrowser: {
-        url: `${bundleStaticsOrigin}/modules/${gitSha}/${moduleName}/${moduleVersion}/${moduleName}.legacy.browser.js`,
+        url: `${moduleBaseUrl}.legacy.browser.js`,
         integrity: integrityDigests.legacyBrowser,
       },
       node: {
-        url: `${bundleStaticsOrigin}/modules/${gitSha}/${moduleName}/${moduleVersion}/${moduleName}.node.js`,
+        url: `${moduleBaseUrl}.node.js`,
         integrity: integrityDigests.node,
       },
     };
+    */
   });
 
   await fs.writeFile(pathToNginxOriginModuleMap, JSON.stringify(moduleMapContent, null, 2));
