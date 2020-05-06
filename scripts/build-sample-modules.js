@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable max-len */
 
 /*
  * Copyright 2019 American Express Travel Related Services Company, Inc.
@@ -45,7 +46,11 @@ async function npmInstall(directory, moduleName, version) {
   console.time(`${moduleName}@${version}`);
   console.log(`⬇️  Installing ${moduleName}@${version}...`);
   try {
-    await promisifySpawn('npm ci', { cwd: directory, shell: true, env: { ...sanitizedEnvVars, NODE_ENV: 'development', NPM_CONFIG_PRODUCTION: false } });
+    await promisifySpawn('npm ci', {
+      cwd: directory,
+      shell: true,
+      env: { ...sanitizedEnvVars, NODE_ENV: 'development', NPM_CONFIG_PRODUCTION: false },
+    });
   } catch (error) {
     console.error(`🚨 ${moduleName}@${version} failed to install:`);
     throw error;
@@ -58,7 +63,11 @@ async function npmProductionBuild(directory, moduleName, version) {
   console.time(`${moduleName}@${version}`);
   console.log(`🛠  Building ${moduleName}@${version}...`);
   try {
-    await promisifySpawn('npm run build', { shell: true, cwd: directory, env: { ...sanitizedEnvVars, NODE_ENV: 'production' } });
+    await promisifySpawn('npm run build', {
+      shell: true,
+      cwd: directory,
+      env: { ...sanitizedEnvVars, NODE_ENV: 'production' },
+    });
   } catch (error) {
     console.error(`🚨 ${moduleName}@${version} failed to build:`);
     throw error;
@@ -77,13 +86,9 @@ async function updateModuleVersion(directory, moduleVersion) {
   const updatedPackageJson = { ...packageJson, version: moduleVersion };
   const updatedPackageLock = { ...packageLock, version: moduleVersion };
 
-  await fs.writeFile(
-    packageJsonPath, JSON.stringify(updatedPackageJson, null, 2)
-  );
+  await fs.writeFile(packageJsonPath, JSON.stringify(updatedPackageJson, null, 2));
 
-  await fs.writeFile(
-    packageLockPath, JSON.stringify(updatedPackageLock, null, 2)
-  );
+  await fs.writeFile(packageLockPath, JSON.stringify(updatedPackageLock, null, 2));
 }
 
 const buildModule = async (pathToModule) => {
@@ -98,7 +103,9 @@ const buildModule = async (pathToModule) => {
   const gitSha = stdout.trim();
   const pathToModuleBuildDir = path.resolve(`${pathToModule}/build/`);
   const pathToBundleIntegrityManifest = path.join(`${pathToModule}/bundle.integrity.manifest.json`);
-  const pathToOriginModuleStatics = path.resolve(`${nginxOriginStaticsModulesDir}/${gitSha}/${moduleName}`);
+  const pathToOriginModuleStatics = path.resolve(
+    `${nginxOriginStaticsModulesDir}/${gitSha}/${moduleName}`
+  );
   await fs.ensureDir(pathToOriginModuleStatics);
   await fs.copy(pathToModuleBuildDir, pathToOriginModuleStatics, { overwrite: true });
 
@@ -106,13 +113,14 @@ const buildModule = async (pathToModule) => {
   const integrityDigests = require(pathToBundleIntegrityManifest);
 
   return {
-    moduleName, moduleVersion, integrityDigests, gitSha,
+    moduleName,
+    moduleVersion,
+    integrityDigests,
+    gitSha,
   };
 };
 
-const selectDirectories = (dirContents) => dirContents
-  .filter((item) => item.isDirectory())
-  .map((item) => item.name);
+const selectDirectories = (dirContents) => dirContents.filter((item) => item.isDirectory()).map((item) => item.name);
 
 const buildAllSampleModules = async () => {
   const sampleModulesDirContents = await fs.readdir(sampleModulesDir, { withFileTypes: true });
@@ -120,13 +128,12 @@ const buildAllSampleModules = async () => {
   const moduleNameVersions = {};
   // Map and resolve array of promises from reading version directories
   await Promise.all(
-    sampleModuleNames
-      .map(async (moduleName) => {
-        const versions = selectDirectories(
-          await fs.readdir(path.join(sampleModulesDir, moduleName), { withFileTypes: true })
-        );
-        moduleNameVersions[moduleName] = versions;
-      })
+    sampleModuleNames.map(async (moduleName) => {
+      const versions = selectDirectories(
+        await fs.readdir(path.join(sampleModulesDir, moduleName), { withFileTypes: true })
+      );
+      moduleNameVersions[moduleName] = versions;
+    })
   );
 
   const moduleBuildPromises = [];
@@ -143,21 +150,36 @@ const doWork = async () => {
   const sampleModulesAlreadyBuilt = fs.pathExistsSync(nginxOriginStaticsModulesDir)
     && fs.pathExistsSync(pathToNginxOriginModuleMap);
 
-  if (userIntendsToSkipSampleModulesBuild && sampleModulesAlreadyBuilt) {
-    console.warn(
-      '⚠️  Skipping sample modules build since the "ONE_DANGEROUSLY_SKIP_SAMPLE_MODULES_BUILD"'
-      + 'environment variable is set.\n\nNote that your tests **may** be running against an out of date '
-      + 'version of your sample modules that does not reflect changes you have made to the source code.'
-    );
-    process.exit(0);
-  }
+  const sampleModulesWarn = (shouldWarn) => {
+    const warning = shouldWarn
+      ? `⚠️  Skipping sample modules build since the "ONE_DANGEROUSLY_SKIP_SAMPLE_MODULES_BUILD"
+    environment variable is set.\n\nNote that your tests **may** be running against an out of date 
+    version of your sample modules that does not reflect changes you have made to the source code.`
+      : `⚠️  Building sample modules despite the "ONE_DANGEROUSLY_SKIP_SAMPLE_MODULES_BUILD"
+    'environment variable being set since no pre-built sample modules were found.`;
 
-  if (userIntendsToSkipSampleModulesBuild && !sampleModulesAlreadyBuilt) {
-    console.warn(
-      '⚠️  Building sample modules despite the "ONE_DANGEROUSLY_SKIP_SAMPLE_MODULES_BUILD"'
-      + 'environment variable being set since no pre-built sample modules were found.'
-    );
-  }
+    console.warn(warning);
+    /* eslint no-unused-expressions: ["error", { "allowShortCircuit": true }] */
+    shouldWarn && process.exit(0);
+  };
+
+  userIntendsToSkipSampleModulesBuild && sampleModulesWarn(sampleModulesAlreadyBuilt);
+
+  // if (userIntendsToSkipSampleModulesBuild && sampleModulesAlreadyBuilt) {
+  //   console.warn(
+  //     '⚠️  Skipping sample modules build since the "ONE_DANGEROUSLY_SKIP_SAMPLE_MODULES_BUILD"'
+  //     + 'environment variable is set.\n\nNote that your tests **may** be running against an out of date '
+  //     + 'version of your sample modules that does not reflect changes you have made to the source code.'
+  //   );
+  //   process.exit(0);
+  // }
+
+  // if (userIntendsToSkipSampleModulesBuild && !sampleModulesAlreadyBuilt) {
+  //   console.warn(
+  //     '⚠️  Building sample modules despite the "ONE_DANGEROUSLY_SKIP_SAMPLE_MODULES_BUILD"'
+  //     + 'environment variable being set since no pre-built sample modules were found.'
+  //   );
+  // }
 
   await Promise.all([
     fs.emptyDir(nginxOriginStaticsModulesDir),
@@ -173,7 +195,9 @@ const doWork = async () => {
     if (moduleMapContent.modules[moduleName]) {
       // intent is to add the oldest version of a sample module to the initial module map and then
       // integration tests can add the newer versions dynamically as needed
-      const [, currentModuleVersion] = moduleMapContent.modules[moduleName].node.url.split('/').reverse();
+      const [, currentModuleVersion] = moduleMapContent.modules[moduleName].node.url
+        .split('/')
+        .reverse();
       const [currentMajor, currentMinor, currentPatch] = currentModuleVersion.split('.');
       if (currentMajor < major || currentMinor < minor || currentPatch < patch) {
         return;
@@ -196,9 +220,7 @@ const doWork = async () => {
     };
   });
 
-  await fs.writeFile(
-    pathToNginxOriginModuleMap, JSON.stringify(moduleMapContent, null, 2)
-  );
+  await fs.writeFile(pathToNginxOriginModuleMap, JSON.stringify(moduleMapContent, null, 2));
 
   await fs.copy(pathToAssets, nginxOriginStaticsRootDir);
 
@@ -210,7 +232,6 @@ const doWork = async () => {
       fs.move(nginxOriginStaticsModulesDir, path.join(pathToBundles, 'modules')),
       fs.move(pathToNginxOriginModuleMap, path.join(pathToBundles, 'module-map.json')),
     ]);
-
 
     console.log(`✅ Bundled One App Sample Modules and Module Map created at ${pathToBundles}`);
   }
