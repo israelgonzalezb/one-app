@@ -186,37 +186,35 @@ const doWork = async () => {
     fs.remove(pathToNginxOriginModuleMap),
   ]);
 
+  // Refactor Note: Thought to merge these promises from L184-L190
+  //  but their completion order might be interdependent
   const sampleModulesMetadata = await buildAllSampleModules();
   const moduleMapContent = { key: 'not-used-in-development', modules: {} };
   sampleModulesMetadata.forEach(({
     moduleName, moduleVersion, integrityDigests, gitSha,
   }) => {
     const [major, minor, patch] = moduleVersion.split('.');
-    if (moduleMapContent.modules[moduleName]) {
-      // intent is to add the oldest version of a sample module to the initial module map and then
-      // integration tests can add the newer versions dynamically as needed
-      const [, currentModuleVersion] = moduleMapContent.modules[moduleName].node.url
-        .split('/')
-        .reverse();
-      const [currentMajor, currentMinor, currentPatch] = currentModuleVersion.split('.');
-      if (currentMajor < major || currentMinor < minor || currentPatch < patch) {
-        return;
-      }
-    }
 
-    const moduleBaseUrl = `${bundleStaticsOrigin}/modules/${gitSha}/${moduleName}/${moduleVersion}/${moduleName}`;
-    const moduleBaseObj = {};
+    // intent is to add the oldest version of a sample module to the initial module map and then
+    // integration tests can add the newer versions dynamically as needed
+    const [currentMajor, currentMinor, currentPatch] = moduleMapContent.modules?.[moduleName].node.url
+      .split('/')
+      .reverse()[1]
+      .split('.');
+    if (currentMajor < major || currentMinor < minor || currentPatch < patch) return;
+
+    moduleMapContent.modules[moduleName] = {};
 
     ['browser', 'legacyBrowser', 'node'].forEach((environment) => {
       const environmentAlt = environment !== 'legacyBrowser' ? environment : 'legacy.browser';
-      Object.assign(moduleBaseObj, {
+      Object.assign(moduleMapContent.modules[moduleName], {
         [environment]: {
-          url: `${moduleBaseUrl}.${environmentAlt}.js`,
+          url: `${bundleStaticsOrigin}/modules/${gitSha}/${moduleName}/${moduleVersion}/${moduleName}.${environmentAlt}.js`,
           integrity: integrityDigests[environment],
         },
       });
     });
-    moduleMapContent.modules[moduleName] = moduleBaseObj;
+
     /*
     moduleMapContent.modules[moduleName] = {
       browser: {
@@ -240,8 +238,7 @@ const doWork = async () => {
   await fs.copy(pathToAssets, nginxOriginStaticsRootDir);
 
   if (archiveBuiltArtifacts) {
-    const sampleModuleBundlesDirname = 'sample-module-bundles';
-    const pathToBundles = path.join(process.cwd(), sampleModuleBundlesDirname);
+    const pathToBundles = path.join(process.cwd(), 'sample-module-bundles');
     await fs.emptyDir(pathToBundles);
     await Promise.all([
       fs.move(nginxOriginStaticsModulesDir, path.join(pathToBundles, 'modules')),
