@@ -150,43 +150,22 @@ const doWork = async () => {
   const sampleModulesAlreadyBuilt = fs.pathExistsSync(nginxOriginStaticsModulesDir)
     && fs.pathExistsSync(pathToNginxOriginModuleMap);
 
-  const sampleModulesWarn = (shouldWarn) => {
-    const warning = shouldWarn
-      ? `⚠️  Skipping sample modules build since the "ONE_DANGEROUSLY_SKIP_SAMPLE_MODULES_BUILD"
+  console.warn(sampleModulesAlreadyBuilt && userIntendsToSkipSampleModulesBuild
+    ? `⚠️  Skipping sample modules build since the "ONE_DANGEROUSLY_SKIP_SAMPLE_MODULES_BUILD"
     environment variable is set.\n\nNote that your tests **may** be running against an out of date 
     version of your sample modules that does not reflect changes you have made to the source code.`
-      : `⚠️  Building sample modules despite the "ONE_DANGEROUSLY_SKIP_SAMPLE_MODULES_BUILD"
-    'environment variable being set since no pre-built sample modules were found.`;
+    : `⚠️  Building sample modules despite the "ONE_DANGEROUSLY_SKIP_SAMPLE_MODULES_BUILD"
+    'environment variable being set since no pre-built sample modules were found.`);
 
-    console.warn(warning);
-    /* eslint no-unused-expressions: ["error", { "allowShortCircuit": true }] */
-    shouldWarn && process.exit(0);
-  };
-
-  userIntendsToSkipSampleModulesBuild && sampleModulesWarn(sampleModulesAlreadyBuilt);
-
-  // if (userIntendsToSkipSampleModulesBuild && sampleModulesAlreadyBuilt) {
-  //   console.warn(
-  //     '⚠️  Skipping sample modules build since the "ONE_DANGEROUSLY_SKIP_SAMPLE_MODULES_BUILD"'
-  //     + 'environment variable is set.\n\nNote that your tests **may** be running against an out of date '
-  //     + 'version of your sample modules that does not reflect changes you have made to the source code.'
-  //   );
-  //   process.exit(0);
-  // }
-
-  // if (userIntendsToSkipSampleModulesBuild && !sampleModulesAlreadyBuilt) {
-  //   console.warn(
-  //     '⚠️  Building sample modules despite the "ONE_DANGEROUSLY_SKIP_SAMPLE_MODULES_BUILD"'
-  //     + 'environment variable being set since no pre-built sample modules were found.'
-  //   );
-  // }
+  /* eslint no-unused-expressions: ["error", { "allowShortCircuit": true }] */
+  userIntendsToSkipSampleModulesBuild && sampleModulesAlreadyBuilt && process.exit(0);
 
   await Promise.all([
     fs.emptyDir(nginxOriginStaticsModulesDir),
     fs.remove(pathToNginxOriginModuleMap),
   ]);
 
-  // Refactor Note: Thought to merge these promises from L184-L190
+  // Refactor Note: Thought to include the line below in the above `await Promise.all`
   //  but their completion order might be interdependent
   const sampleModulesMetadata = await buildAllSampleModules();
   const moduleMapContent = { key: 'not-used-in-development', modules: {} };
@@ -197,13 +176,12 @@ const doWork = async () => {
 
     // intent is to add the oldest version of a sample module to the initial module map and then
     // integration tests can add the newer versions dynamically as needed
-    const [currentMajor, currentMinor, currentPatch] = moduleMapContent.modules?.[moduleName].node.url
+    const [currMajor, currMinor, currPatch] = moduleMapContent.modules?.[moduleName]
+      .node.url
       .split('/')
       .reverse()[1]
       .split('.');
-    if (currentMajor < major || currentMinor < minor || currentPatch < patch) return;
-
-    moduleMapContent.modules[moduleName] = {};
+    if (currMajor < major || currMinor < minor || currPatch < patch) return;
 
     ['browser', 'legacyBrowser', 'node'].forEach((environment) => {
       const environmentAlt = environment !== 'legacyBrowser' ? environment : 'legacy.browser';
@@ -214,23 +192,6 @@ const doWork = async () => {
         },
       });
     });
-
-    /*
-    moduleMapContent.modules[moduleName] = {
-      browser: {
-        url: `${moduleBaseUrl}.browser.js`,
-        integrity: integrityDigests.browser,
-      },
-      legacyBrowser: {
-        url: `${moduleBaseUrl}.legacy.browser.js`,
-        integrity: integrityDigests.legacyBrowser,
-      },
-      node: {
-        url: `${moduleBaseUrl}.node.js`,
-        integrity: integrityDigests.node,
-      },
-    };
-    */
   });
 
   await fs.writeFile(pathToNginxOriginModuleMap, JSON.stringify(moduleMapContent, null, 2));
